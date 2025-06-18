@@ -1,47 +1,26 @@
-
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-
-
-from flask import Blueprint, request, jsonify
-from server.models import db
+from flask import Blueprint, jsonify, request
 from server.models.restaurant_pizza import RestaurantPizza
-from server.models.restaurant import Restaurant
-from server.models.pizza import Pizza
+from server import db
+from sqlalchemy.exc import IntegrityError
 
-restaurant_pizza_bp = Blueprint('restaurant_pizzas', __name__)
+restaurant_pizzas_bp = Blueprint('restaurant_pizzas', __name__)
 
-@restaurant_pizza_bp.route('/restaurant_pizzas', methods=['POST'])
+@restaurant_pizzas_bp.route('/restaurant_pizzas', methods=['POST'])
 def create_restaurant_pizza():
     data = request.get_json()
-    price = data.get('price')
-    pizza_id = data.get('pizza_id')
-    restaurant_id = data.get('restaurant_id')
-
-    rp = RestaurantPizza(price=price, pizza_id=pizza_id, restaurant_id=restaurant_id)
-    if not rp.validate_price():
-        return jsonify({"errors": ["Price must be between 1 and 30"]}), 400
-
-    db.session.add(rp)
-    db.session.commit()
-
-    pizza = Pizza.query.get(pizza_id)
-    restaurant = Restaurant.query.get(restaurant_id)
-
-    return jsonify({
-        "id": rp.id,
-        "price": rp.price,
-        "pizza_id": rp.pizza_id,
-        "restaurant_id": rp.restaurant_id,
-        "pizza": {
-            "id": pizza.id,
-            "name": pizza.name,
-            "ingredients": pizza.ingredients
-        },
-        "restaurant": {
-            "id": restaurant.id,
-            "name": restaurant.name,
-            "address": restaurant.address
-        }
-    }), 201
+    
+    try:
+        restaurant_pizza = RestaurantPizza(
+            price=data['price'],
+            pizza_id=data['pizza_id'],
+            restaurant_id=data['restaurant_id']
+        )
+        db.session.add(restaurant_pizza)
+        db.session.commit()
+        return jsonify(restaurant_pizza.to_dict()), 201
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'errors': ['Validation errors']}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'errors': [str(e)]}), 400
